@@ -34,16 +34,5 @@ class MaintenanceAgent:
 
         self.chat = ChatService(db)
 
-    def run(
-
-        self,
-
-        question,
-
-    ):
-
-        return self.chat.ask(
-
-            PROMPT + "\n\n" + question
-
-        )
+    def run(self, question):
+        return self.chat.ask(question, instruction=PROMPT)

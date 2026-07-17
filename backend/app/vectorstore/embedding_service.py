@@ -1,41 +1,16 @@
-from app.vectorstore.pgvector import vector_store
+"""Embedding generation for chunks and queries (pgvector storage)."""
+
+from __future__ import annotations
+
+from app.ai.client import ai_client
 
 
 class EmbeddingService:
 
     @staticmethod
-    def store_chunks(chunks):
+    def embed_document(text: str) -> list[float] | None:
+        return ai_client.embed(text, task_type="retrieval_document")
 
-        texts = []
-
-        metadatas = []
-
-        ids = []
-
-        for chunk in chunks:
-
-            texts.append(chunk.content)
-
-            ids.append(str(chunk.id))
-
-            metadatas.append(
-
-                {
-                    "document_id": chunk.document_id,
-                    "page": chunk.page_number,
-                    "heading": chunk.heading,
-                    "section": chunk.section,
-                    "chunk_id": chunk.id,
-                }
-
-            )
-
-        vector_store.add_texts(
-
-            texts=texts,
-
-            metadatas=metadatas,
-
-            ids=ids,
-
-        )
+    @staticmethod
+    def embed_query(text: str) -> list[float] | None:
+        return ai_client.embed(text, task_type="retrieval_query")

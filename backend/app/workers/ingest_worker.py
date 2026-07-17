@@ -79,6 +79,7 @@ class IngestWorker:
             await IngestionPipeline().run(
                 document=document,
                 db=db,
+                local_file=local_path,
             )
 
             document.processing_status = (
