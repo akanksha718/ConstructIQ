@@ -1,27 +1,16 @@
-import os
+"""Embedding helpers backed by the unified Gemini client."""
 
-import google.generativeai as genai
+from __future__ import annotations
 
-genai.configure(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+from app.ai.client import ai_client
 
 
 class GeminiEmbedding:
 
-    MODEL = "models/text-embedding-004"
+    @classmethod
+    def embed(cls, text: str) -> list[float] | None:
+        return ai_client.embed(text)
 
     @classmethod
-    def embed(cls, text: str):
-
-        result = genai.embed_content(
-
-            model=cls.MODEL,
-
-            content=text,
-
-            task_type="retrieval_document",
-
-        )
-
-        return result["embedding"]
+    def embed_query(cls, text: str) -> list[float] | None:
+        return ai_client.embed_query(text)

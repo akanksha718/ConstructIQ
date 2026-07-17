@@ -41,17 +41,24 @@ class DocumentChunk(Base):
         default=""
     )
 
+    section: Mapped[str] = mapped_column(
+        String(300),
+        default=""
+    )
+
     content: Mapped[str] = mapped_column(
         Text
     )
 
-    metadata: Mapped[dict] = mapped_column(
+    chunk_metadata: Mapped[dict] = mapped_column(
+        "metadata",
         JSONB,
         default=dict
     )
 
-    embedding: Mapped[list] = mapped_column(
-        Vector(768)
+    embedding: Mapped[list | None] = mapped_column(
+        Vector(768),
+        nullable=True
     )
 
     document = relationship(
@@ -61,5 +68,6 @@ class DocumentChunk(Base):
 
     entities = relationship(
         "DocumentEntity",
+        back_populates="chunk",
         cascade="all, delete-orphan"
     )

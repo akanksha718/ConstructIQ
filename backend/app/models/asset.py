@@ -43,8 +43,3 @@ class Asset(Base):
         DateTime,
         default=datetime.utcnow
     )
-
-    entities = relationship(
-        "DocumentEntity",
-        back_populates="asset"
-    )

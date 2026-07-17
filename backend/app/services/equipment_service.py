@@ -60,6 +60,18 @@ class EquipmentService:
 
     ):
 
+        existing = (
+            db.query(EquipmentDocument)
+            .filter(
+                EquipmentDocument.equipment_id == equipment_id,
+                EquipmentDocument.document_id == document_id,
+            )
+            .first()
+        )
+
+        if existing:
+            return existing
+
         link = EquipmentDocument(
 
             equipment_id=equipment_id,
@@ -71,3 +83,5 @@ class EquipmentService:
         db.add(link)
 
         db.commit()
+
+        return link

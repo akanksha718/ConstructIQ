@@ -4,13 +4,14 @@ from enum import Enum
 from sqlalchemy import DateTime
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import Integer
+from sqlalchemy import BigInteger
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
-from sqlalchemy.orm import relationship
+
 
 class ProcessingStatus(str, Enum):
     QUEUED = "QUEUED"
@@ -25,6 +26,27 @@ class ProcessingStatus(str, Enum):
     FAILED = "FAILED"
 
 
+class FileType(str, Enum):
+    PDF = "PDF"
+    DOC = "DOC"
+    DOCX = "DOCX"
+    PPT = "PPT"
+    PPTX = "PPTX"
+    XLS = "XLS"
+    XLSX = "XLSX"
+    CSV = "CSV"
+    TXT = "TXT"
+    PNG = "PNG"
+    JPG = "JPG"
+    JPEG = "JPEG"
+    DWG = "DWG"
+    DXF = "DXF"
+    EML = "EML"
+    MSG = "MSG"
+    ZIP = "ZIP"
+    OTHER = "OTHER"
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -34,11 +56,7 @@ class Document(Base):
         index=True
     )
 
-    title: Mapped[str] = mapped_column(
-        String(300)
-    )
-
-    original_filename: Mapped[str] = mapped_column(
+    filename: Mapped[str] = mapped_column(
         String(500)
     )
 
@@ -46,12 +64,19 @@ class Document(Base):
         String(500)
     )
 
-    mime_type: Mapped[str] = mapped_column(
-        String(120)
+    file_url: Mapped[str] = mapped_column(
+        String(1000),
+        default=""
     )
 
-    size: Mapped[int] = mapped_column(
-        Integer
+    file_size: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0
+    )
+
+    file_type: Mapped[FileType] = mapped_column(
+        SQLEnum(FileType),
+        default=FileType.OTHER
     )
 
     uploaded_by: Mapped[str] = mapped_column(
@@ -82,13 +107,10 @@ class Document(Base):
 
     entities = relationship(
         "DocumentEntity",
+        back_populates="document",
         cascade="all, delete-orphan"
     )
-    chunks = relationship(
-    "DocumentChunk",
-    back_populates="document",
-    cascade="all, delete",
-    )
+
     equipment = relationship(
         "EquipmentDocument",
         back_populates="document",

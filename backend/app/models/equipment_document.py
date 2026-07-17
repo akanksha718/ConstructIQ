@@ -34,4 +34,7 @@ class EquipmentDocument(Base):
         back_populates="documents",
     )
 
-    document = relationship("Document")
+    document = relationship(
+        "Document",
+        back_populates="equipment",
+    )

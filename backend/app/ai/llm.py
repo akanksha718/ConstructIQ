@@ -1,16 +1,26 @@
-import os
+"""
+Backwards-compatible ``llm`` facade.
 
-import google.generativeai as genai
+Historically modules used ``from app.ai.llm import llm`` and called
+``llm.generate_content(prompt).text``. That surface is preserved here but is now
+backed by the unified, gracefully-degrading :mod:`app.ai.client`.
+"""
 
-from dotenv import load_dotenv
+from __future__ import annotations
 
-load_dotenv()
+from dataclasses import dataclass
 
-genai.configure(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+from app.ai.client import ai_client
 
 
-llm = genai.GenerativeModel(
-    model_name="gemini-2.5-flash"
-)
+@dataclass
+class LLMResponse:
+    text: str
+
+
+class _LLM:
+    def generate_content(self, prompt: str) -> LLMResponse:
+        return LLMResponse(text=ai_client.generate_text(prompt))
+
+
+llm = _LLM()

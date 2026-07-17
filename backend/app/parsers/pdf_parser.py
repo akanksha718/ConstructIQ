@@ -1,14 +1,43 @@
-from docling.document_converter import DocumentConverter
+"""PDF text extraction using pypdf, with an optional OCR fallback."""
+
+from __future__ import annotations
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PDFParser:
 
-    def __init__(self):
+    def parse(self, file_path: str) -> str:
+        try:
+            from pypdf import PdfReader
+        except Exception:  # pragma: no cover - dependency missing
+            logger.exception("pypdf not available")
+            return ""
 
-        self.converter = DocumentConverter()
+        try:
+            reader = PdfReader(file_path)
+        except Exception:
+            logger.exception("Failed to open PDF %s", file_path)
+            return ""
 
-    def parse(self, file_path):
+        pages: list[str] = []
+        for index, page in enumerate(reader.pages, start=1):
+            try:
+                text = page.extract_text() or ""
+            except Exception:
+                text = ""
+            pages.append(f"<!-- page:{index} -->\n{text.strip()}")
 
-        result = self.converter.convert(file_path)
+        combined = "\n\n".join(pages).strip()
 
-        return result.document.export_to_markdown()
+        # Scanned PDF (no extractable text) -> try OCR if it is available.
+        if not combined.replace("<!-- page:", "").strip():
+            from app.parsers.ocr import OCRService
+
+            ocr_text = OCRService.extract_pdf(file_path)
+            if ocr_text:
+                return ocr_text
+
+        return combined

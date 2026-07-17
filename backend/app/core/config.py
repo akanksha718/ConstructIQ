@@ -1,6 +1,10 @@
+from pydantic_settings import BaseSettings
+from pydantic_settings import SettingsConfigDict
+
+
 class Settings(BaseSettings):
 
-    APP_NAME: str
+    APP_NAME: str = "ConstructIQ"
 
     DATABASE_URL: str
 
@@ -28,3 +32,6 @@ class Settings(BaseSettings):
         env_file=".env",
         extra="ignore",
     )
+
+
+settings = Settings()

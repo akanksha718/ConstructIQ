@@ -1,24 +1,70 @@
-import pandas as pd
+"""Spreadsheet / CSV parsing without pandas (openpyxl + stdlib csv)."""
+
+from __future__ import annotations
+
+import csv
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class ExcelParser:
 
-    def parse(self, file_path):
+    def parse(self, file_path: str) -> str:
+        ext = Path(file_path).suffix.lower()
 
-        excel = pd.ExcelFile(file_path)
+        if ext == ".csv":
+            return self._parse_csv(file_path)
 
-        output = []
+        return self._parse_xlsx(file_path)
 
-        for sheet in excel.sheet_names:
+    @staticmethod
+    def _rows_to_markdown(rows: list[list[str]]) -> str:
+        rows = [r for r in rows if any(str(c).strip() for c in r)]
+        if not rows:
+            return ""
 
-            df = excel.parse(sheet)
+        header = rows[0]
+        lines = [
+            "| " + " | ".join(str(c) for c in header) + " |",
+            "| " + " | ".join("---" for _ in header) + " |",
+        ]
+        for row in rows[1:]:
+            padded = list(row) + [""] * (len(header) - len(row))
+            lines.append("| " + " | ".join(str(c) for c in padded) + " |")
+        return "\n".join(lines)
 
-            output.append(
-                f"# Sheet: {sheet}\n"
-            )
+    def _parse_csv(self, file_path: str) -> str:
+        try:
+            with open(file_path, newline="", encoding="utf-8-sig") as fh:
+                rows = list(csv.reader(fh))
+        except Exception:
+            logger.exception("Failed to read CSV %s", file_path)
+            return ""
+        return self._rows_to_markdown(rows)
 
-            output.append(
-                df.to_markdown(index=False)
-            )
+    def _parse_xlsx(self, file_path: str) -> str:
+        try:
+            from openpyxl import load_workbook
+        except Exception:  # pragma: no cover - dependency missing
+            logger.exception("openpyxl not available")
+            return ""
 
-        return "\n\n".join(output)
+        try:
+            wb = load_workbook(file_path, read_only=True, data_only=True)
+        except Exception:
+            logger.exception("Failed to open workbook %s", file_path)
+            return ""
+
+        sections = []
+        for sheet in wb.worksheets:
+            rows = [
+                [("" if c is None else c) for c in row]
+                for row in sheet.iter_rows(values_only=True)
+            ]
+            table = self._rows_to_markdown(rows)
+            if table:
+                sections.append(f"# Sheet: {sheet.title}\n\n{table}")
+
+        return "\n\n".join(sections)

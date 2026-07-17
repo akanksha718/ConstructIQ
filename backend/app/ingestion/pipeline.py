@@ -1,136 +1,109 @@
-from app.ingestion.parser import IndustrialParser
+"""End-to-end ingestion pipeline.
 
-from app.ingestion.chunker import IndustrialChunker
+For a stored document it: downloads the file, parses it to text (PDF/OCR/Excel/
+CSV/email/image), chunks it, embeds each chunk into pgvector, extracts entities +
+relationships with the LLM, builds the Postgres knowledge graph, promotes/links
+equipment, and optionally mirrors to Neo4j. Every AI-dependent step degrades
+gracefully so ingestion completes (chunks stored, keyword-searchable) even
+without a Gemini key.
+"""
 
-from app.ingestion.matadata import MetadataExtractor
+from __future__ import annotations
 
-from app.ingestion.extractor import KnowledgeExtractor
+import logging
+
+from sqlalchemy.orm import Session
 
 from app.graph.graph_builder import GraphBuilder
-
-from app.vectorstore.indexer import VectorIndexer
-from app.intelligence.equipment_linker import EquipmentLinker
-from app.models.chunk import DocumentChunk
-from app.vectorstore.embedding_service import EmbeddingService
-from app.services.storage_service import StorageService
+from app.graph.graph_service import KnowledgeGraphService
+from app.ingestion.chunker import IndustrialChunker
+from app.models.document import ProcessingStatus
+from app.models.document_chunk import DocumentChunk
 from app.parsers.factory import ParserFactory
-from backend.app.graph.graph_service import KnowledgeGraphService
+from app.services.entity_extractor import EntityExtractor
+from app.services.relation_extractor import RelationExtractor
+from app.services.storage_service import StorageService
+from app.vectorstore.embedding_service import EmbeddingService
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionPipeline:
 
-    def __init__(self):
-
-        self.parser = IndustrialParser()
-
+    def __init__(self) -> None:
         self.chunker = IndustrialChunker()
-
-        self.metadata = MetadataExtractor()
-
-        self.extractor = KnowledgeExtractor()
+        self.entity_extractor = EntityExtractor()
+        self.relation_extractor = RelationExtractor()
 
     async def run(
-
         self,
-
         document,
+        db: Session,
+        local_file: str | None = None,
+    ) -> None:
+        owns_file = local_file is None
+        if local_file is None:
+            local_file = await StorageService.download_file(
+                document.storage_path
+            )
 
-        db,
+        try:
+            self._process(document, db, local_file)
+        finally:
+            if owns_file:
+                self._cleanup(local_file)
 
-    ):
+    def _process(self, document, db: Session, local_file: str) -> None:
+        text = ParserFactory.parse(document.filename, local_file)
 
-        local_file = await StorageService.download_file(
-
-            document.storage_path
-
-        )
-
-        parser = ParserFactory.get_parser(document.filename)
-        markdown = parser.parse(local_file)
-
-        metadata = self.metadata.extract(
-
-            local_file
-
-        )
-        all_extractions = []
-
-        chunks = self.chunker.create_chunks(
-
-            markdown
-
-        )
+        self._set_status(db, document, ProcessingStatus.CHUNKING)
+        chunks = self.chunker.create_chunks(text)
 
         graph = GraphBuilder(db)
 
-        stored_chunks = []
-
-        for idx, chunk in enumerate(chunks):
+        for index, chunk in enumerate(chunks):
+            embedding = EmbeddingService.embed_document(chunk.page_content)
 
             db_chunk = DocumentChunk(
-
                 document_id=document.id,
-
-                chunk_index=idx,
-
-                page_number=chunk.metadata.get(
-
-                    "page",
-
-                    1,
-
-                ),
-
-                heading=chunk.metadata.get(
-
-                    "heading",
-
-                ),
-
-                section=chunk.metadata.get(
-
-                    "section",
-
-                ),
-
+                chunk_index=index,
+                page_number=chunk.page or 1,
+                heading=chunk.heading or "",
+                section=chunk.section or "",
                 content=chunk.page_content,
-
+                chunk_metadata=chunk.metadata,
+                embedding=embedding,
             )
-
             db.add(db_chunk)
-
             db.flush()
 
-            extraction = self.extractor.extract(
+            entities = self.entity_extractor.extract(chunk.page_content)
+            relations = self.relation_extractor.extract(chunk.page_content)
+            graph.build_for_chunk(document, db_chunk, entities, relations)
 
-                chunk.page_content
+        self._set_status(db, document, ProcessingStatus.KNOWLEDGE_GRAPH)
+        graph.link_equipment(document)
 
-            )
-
-            all_extractions.append(extraction)
-
-            graph.build(
-
-                extraction,
-
-                document,
-
-                db_chunk,
-
-            )
-
-            stored_chunks.append(db_chunk)
-        EmbeddingService.store_chunks(
-            stored_chunks
-        )
-        KnowledgeGraphService.build(
-
-            extraction,
-
-            document.id,
-
-        )
-        os.remove(local_file)
         db.commit()
 
-        
+        # Optional Neo4j mirror (no-op when not configured).
+        try:
+            KnowledgeGraphService.sync(db, document)
+        except Exception:  # pragma: no cover - optional
+            logger.exception("Neo4j sync failed (non-fatal).")
+
+    @staticmethod
+    def _set_status(db: Session, document, status: ProcessingStatus) -> None:
+        document.processing_status = status
+        db.add(document)
+        db.flush()
+
+    @staticmethod
+    def _cleanup(local_file: str) -> None:
+        import os
+
+        try:
+            if local_file and os.path.exists(local_file):
+                os.remove(local_file)
+        except OSError:  # pragma: no cover
+            logger.warning("Could not remove temp file %s", local_file)

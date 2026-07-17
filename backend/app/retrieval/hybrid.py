@@ -1,84 +1,95 @@
-from app.retrieval.query_analyzer import QueryAnalyzer
-from app.retrieval.vector_search import VectorSearcher
-from app.retrieval.graph_search import GraphSearcher
-from app.retrieval.metadata_search import MetadataSearcher
-from app.retrieval.reranker import ResultReranker
-from app.retrieval.context_builder import ContextBuilder
-from app.retrieval.citation_service import CitationService
+"""Hybrid retrieval: vector similarity + knowledge-graph entity expansion.
+
+Returns the assembled context string, per-source citations (document, page,
+heading) and an overall confidence derived from the best similarity score. Works
+in degraded mode (keyword search) when embeddings are unavailable.
+"""
+
+from __future__ import annotations
+
+from sqlalchemy.orm import Session
+
+from app.graph.entity_resolver import EntityResolver
+from app.models.entity import DocumentEntity
+from app.vectorstore.search import RetrievedChunk, VectorSearcher
 
 
 class HybridRetriever:
 
-    def __init__(self, db):
-
+    def __init__(self, db: Session):
         self.db = db
 
-    def retrieve(
+    def retrieve(self, question: str, k: int = 8) -> dict:
+        chunks = VectorSearcher.search(self.db, question, k=k)
+        related_equipment = self._related_equipment(question)
 
-        self,
-
-        question: str,
-
-    ):
-
-        analysis = QueryAnalyzer.analyze(
-
-            question
-
-        )
-
-        graph = GraphSearcher(
-
-            self.db
-
-        ).search(
-
-            analysis.equipment
-
-        )
-
-        vectors = VectorSearcher.search(
-
-            question
-
-        )
-
-        metadata = MetadataSearcher(
-
-            self.db
-
-        ).search(
-
-            analysis
-
-        )
-
-        ranked = ResultReranker.rerank(
-
-            graph,
-
-            vectors,
-
-            metadata,
-
-        )
-
-        context = ContextBuilder.build(
-
-            ranked
-
-        )
-
-        citations = CitationService.build(
-
-            ranked
-
-        )
+        context = self._build_context(chunks)
+        citations = self._build_citations(chunks)
+        confidence = self._confidence(chunks)
 
         return {
-
             "context": context,
-
             "citations": citations,
-
+            "confidence": confidence,
+            "related_equipment": related_equipment,
         }
+
+    def _related_equipment(self, question: str) -> list[str]:
+        """Surface equipment tags mentioned in the question via the graph."""
+
+        tokens = {
+            EntityResolver.normalize(t)
+            for t in question.replace(",", " ").split()
+            if len(t) > 2
+        }
+        if not tokens:
+            return []
+
+        equipment = (
+            self.db.query(DocumentEntity.entity_value)
+            .filter(DocumentEntity.entity_type == "EQUIPMENT")
+            .distinct()
+            .all()
+        )
+        return [
+            value
+            for (value,) in equipment
+            if EntityResolver.normalize(value) in tokens
+        ]
+
+    @staticmethod
+    def _build_context(chunks: list[RetrievedChunk]) -> str:
+        parts = []
+        for index, chunk in enumerate(chunks, start=1):
+            location = f"{chunk.document_name}"
+            if chunk.page:
+                location += f", p.{chunk.page}"
+            if chunk.heading:
+                location += f", {chunk.heading}"
+            parts.append(f"[{index}] ({location})\n{chunk.content}")
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _build_citations(chunks: list[RetrievedChunk]) -> list[dict]:
+        seen = set()
+        citations = []
+        for chunk in chunks:
+            key = (chunk.document_name, chunk.page, chunk.heading)
+            if key in seen:
+                continue
+            seen.add(key)
+            citations.append(
+                {
+                    "document": chunk.document_name,
+                    "page": chunk.page,
+                    "heading": chunk.heading or None,
+                }
+            )
+        return citations
+
+    @staticmethod
+    def _confidence(chunks: list[RetrievedChunk]) -> float:
+        if not chunks:
+            return 0.0
+        top = max(c.score for c in chunks)
+        return round(float(top), 3)
