@@ -71,18 +71,18 @@ class HybridRetriever:
 
     @staticmethod
     def _build_citations(chunks: list[RetrievedChunk]) -> list[dict]:
-        seen = set()
         citations = []
-        for chunk in chunks:
-            key = (chunk.document_name, chunk.page, chunk.heading)
-            if key in seen:
-                continue
-            seen.add(key)
+        for index, chunk in enumerate(chunks, start=1):
             citations.append(
                 {
+                    "source_index": index,
+                    "document_id": chunk.document_id,
                     "document": chunk.document_name,
+                    "file_url": chunk.document_url,
                     "page": chunk.page,
                     "heading": chunk.heading or None,
+                    "section": chunk.section or None,
+                    "excerpt": HybridRetriever._excerpt(chunk.content),
                 }
             )
         return citations
@@ -93,3 +93,10 @@ class HybridRetriever:
             return 0.0
         top = max(c.score for c in chunks)
         return round(float(top), 3)
+
+    @staticmethod
+    def _excerpt(content: str, limit: int = 220) -> str:
+        cleaned = " ".join((content or "").split())
+        if len(cleaned) <= limit:
+            return cleaned
+        return cleaned[: limit - 3].rstrip() + "..."

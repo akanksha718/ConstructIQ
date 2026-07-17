@@ -21,6 +21,7 @@ class RetrievedChunk:
     chunk_id: int
     document_id: int
     document_name: str
+    document_url: str | None
     content: str
     page: int | None
     heading: str
@@ -58,7 +59,12 @@ class VectorSearcher:
         distance = DocumentChunk.embedding.cosine_distance(embedding)
 
         rows = (
-            db.query(DocumentChunk, Document.filename, distance.label("dist"))
+            db.query(
+                DocumentChunk,
+                Document.filename,
+                Document.file_url,
+                distance.label("dist"),
+            )
             .join(Document, Document.id == DocumentChunk.document_id)
             .filter(DocumentChunk.embedding.isnot(None))
             .order_by(distance)
@@ -67,10 +73,15 @@ class VectorSearcher:
         )
 
         retrieved = []
-        for chunk, filename, dist in rows:
+        for chunk, filename, file_url, dist in rows:
             similarity = max(0.0, 1.0 - float(dist))
             retrieved.append(
-                VectorSearcher._to_retrieved(chunk, filename, similarity)
+                VectorSearcher._to_retrieved(
+                    chunk,
+                    filename,
+                    file_url,
+                    similarity,
+                )
             )
         return retrieved
 
@@ -84,7 +95,7 @@ class VectorSearcher:
         conditions = [DocumentChunk.content.ilike(f"%{t}%") for t in terms]
 
         rows = (
-            db.query(DocumentChunk, Document.filename)
+            db.query(DocumentChunk, Document.filename, Document.file_url)
             .join(Document, Document.id == DocumentChunk.document_id)
             .filter(or_(*conditions))
             .limit(k)
@@ -92,20 +103,22 @@ class VectorSearcher:
         )
 
         return [
-            VectorSearcher._to_retrieved(chunk, filename, 0.0)
-            for chunk, filename in rows
+            VectorSearcher._to_retrieved(chunk, filename, file_url, 0.0)
+            for chunk, filename, file_url in rows
         ]
 
     @staticmethod
     def _to_retrieved(
         chunk: DocumentChunk,
         filename: str,
+        file_url: str | None,
         score: float,
     ) -> RetrievedChunk:
         return RetrievedChunk(
             chunk_id=chunk.id,
             document_id=chunk.document_id,
             document_name=filename,
+            document_url=file_url or None,
             content=chunk.content,
             page=chunk.page_number,
             heading=chunk.heading or "",

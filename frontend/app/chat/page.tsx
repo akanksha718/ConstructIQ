@@ -1,11 +1,5 @@
-import React from 'react'
+import IndustrialChat from "@/components/chat/industrial-chat";
 
-const page = () => {
-  return (
-    <div>
-      chat
-    </div>
-  )
+export default function ChatPage() {
+  return <IndustrialChat />;
 }
-
-export default page
