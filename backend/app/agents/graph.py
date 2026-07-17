@@ -27,30 +27,38 @@ class AgentGraph:
 
         if agent == "maintenance":
 
-            return MaintenanceAgent(
+            result = MaintenanceAgent(
 
                 self.db
 
             ).run(question)
+            result["agent"] = agent
+            return result
 
         if agent == "compliance":
 
-            return ComplianceAgent(
+            result = ComplianceAgent(
 
                 self.db
 
             ).run(question)
+            result["agent"] = agent
+            return result
 
         if agent == "lessons":
 
-            return LessonsAgent(
+            result = LessonsAgent(
 
                 self.db
 
             ).run(question)
+            result["agent"] = agent
+            return result
 
-        return CopilotAgent(
+        result = CopilotAgent(
 
             self.db
 
         ).run(question)
+        result["agent"] = "copilot"
+        return result

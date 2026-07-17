@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 
 from app.schema.chat import ChatRequest
+from app.schema.chat import ChatResponse
 
 router = APIRouter()
 
 
-@router.post("/")
+@router.post("/", response_model=ChatResponse)
 def chat(
     request: ChatRequest,
     db: Session = Depends(get_db),
