@@ -21,7 +21,7 @@ class StorageService:
     - Generate public URL
     """
 
-    BUCKET = settings.SUPABASE_STORAGE_BUCKET
+    BUCKET = settings.SUPABASE_BUCKET
 
     # Allowed file extensions
     ALLOWED_EXTENSIONS = {

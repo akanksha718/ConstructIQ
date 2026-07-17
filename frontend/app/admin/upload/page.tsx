@@ -12,19 +12,60 @@ import {
   CheckCircle2,
   Clock3,
 } from "lucide-react";
-import { useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useState } from "react";
 import { X } from "lucide-react";
 import { uploadDocuments } from "@/services/upload.service";
+import { getStats, type KnowledgeStats } from "@/services/stats.service";
 import { toast } from "sonner";
 import { useAuth } from "@clerk/nextjs";
 
+function formatStat(value: number): string {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  }
+  if (value >= 10_000) {
+    return `${Math.round(value / 1000)}K`;
+  }
+  return value.toLocaleString("en-US");
+}
 
 export default function UploadPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+  const [stats, setStats] = useState<KnowledgeStats | null>(null);
+  const [statsError, setStatsError] = useState(false);
   const { getToken } = useAuth();
+
+  const loadStats = useCallback(() => {
+    return getStats()
+      .then((data) => {
+        setStats(data);
+        setStatsError(false);
+      })
+      .catch(() => {
+        setStatsError(true);
+      });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    getStats()
+      .then((data) => {
+        if (!active) return;
+        setStats(data);
+        setStatsError(false);
+      })
+      .catch(() => {
+        if (active) setStatsError(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -69,6 +110,8 @@ export default function UploadPage() {
       toast.success("Documents uploaded successfully!");
 
       setFiles([]);
+
+      loadStats();
     } catch (err) {
       console.error(err);
 
@@ -146,7 +189,7 @@ export default function UploadPage() {
 
           <p className="mt-5 max-w-3xl text-slate-400 leading-8">
 
-            Build your organization's AI-powered knowledge graph by uploading
+            Build your organization&apos;s AI-powered knowledge graph by uploading
             engineering drawings, maintenance reports, SOPs, inspection
             records, OEM manuals, project files and historical documentation.
 
@@ -238,12 +281,14 @@ export default function UploadPage() {
 
         <div className="mt-10 grid gap-6 md:grid-cols-4">
 
-          {[
-            ["Documents Uploaded", "2,481"],
-            ["Knowledge Entities", "58,942"],
-            ["Equipment Tags", "8,320"],
-            ["Relationships Built", "174K"],
-          ].map(([title, value]) => (
+          {(
+            [
+              ["Documents Uploaded", stats?.documents_uploaded],
+              ["Knowledge Entities", stats?.knowledge_entities],
+              ["Equipment Tags", stats?.equipment_tags],
+              ["Relationships Built", stats?.relationships_built],
+            ] as const
+          ).map(([title, value]) => (
 
             <div
               key={title}
@@ -253,7 +298,11 @@ export default function UploadPage() {
 
               <h2 className="mt-2 text-3xl font-bold text-cyan-300">
 
-                {value}
+                {statsError
+                  ? "—"
+                  : value === undefined
+                    ? "…"
+                    : formatStat(value)}
 
               </h2>
             </div>

@@ -9,8 +9,6 @@ from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.document import ProcessingStatus
 
-from app.ingestion.pipeline import IngestionPipeline
-
 from app.services.storage_service import StorageService
 
 
@@ -74,11 +72,13 @@ class IngestWorker:
                 )
             )
 
-            # Run AI Pipeline
-            await IngestionPipeline.process(
-                db=db,
+            # Run AI Pipeline (imported lazily so a broken/optional
+            # ingestion dependency never prevents the API from booting)
+            from app.ingestion.pipeline import IngestionPipeline
+
+            await IngestionPipeline().run(
                 document=document,
-                local_file=local_path,
+                db=db,
             )
 
             document.processing_status = (

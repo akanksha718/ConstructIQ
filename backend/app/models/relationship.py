@@ -37,9 +37,11 @@ class GraphRelationship(Base):
     source_entity = relationship(
         "DocumentEntity",
         foreign_keys=[source_entity_id],
+        back_populates="relationships",
     )
 
     target_entity = relationship(
         "DocumentEntity",
         foreign_keys=[target_entity_id],
+        back_populates="relationships_incoming",
     )

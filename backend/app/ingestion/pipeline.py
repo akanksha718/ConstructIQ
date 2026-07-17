@@ -1,3 +1,5 @@
+import os
+
 from app.ingestion.parser import IndustrialParser
 
 from app.ingestion.chunker import IndustrialChunker
@@ -10,11 +12,11 @@ from app.graph.graph_builder import GraphBuilder
 
 from app.vectorstore.indexer import VectorIndexer
 from app.intelligence.equipment_linker import EquipmentLinker
-from app.models.chunk import DocumentChunk
+from app.models.document_chunk import DocumentChunk
 from app.vectorstore.embedding_service import EmbeddingService
 from app.services.storage_service import StorageService
 from app.parsers.factory import ParserFactory
-from backend.app.graph.graph_service import KnowledgeGraphService
+from app.graph.graph_service import KnowledgeGraphService
 
 
 class IngestionPipeline:

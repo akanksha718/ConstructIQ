@@ -37,9 +37,16 @@ class DocumentEntity(Base):
 
     confidence = Column(Float)
 
+    document = relationship(
+        "Document",
+        back_populates="entities",
+        foreign_keys=[document_id],
+    )
+
     chunk = relationship(
         "DocumentChunk",
         back_populates="entities",
+        foreign_keys=[chunk_id],
     )
 
     relationships = relationship(
@@ -48,6 +55,7 @@ class DocumentEntity(Base):
         foreign_keys="GraphRelationship.source_entity_id",
     )
     relationships_incoming = relationship(
-    "GraphRelationship",
-    foreign_keys="GraphRelationship.target_entity_id",
+        "GraphRelationship",
+        foreign_keys="GraphRelationship.target_entity_id",
+        back_populates="target_entity",
     )
