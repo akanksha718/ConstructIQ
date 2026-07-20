@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings
 from pydantic_settings import SettingsConfigDict
-
+from pydantic import Field
 
 class Settings(BaseSettings):
 
@@ -19,9 +19,11 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str
     GEMINI_LLM_MODEL: str = "gemini-3.5-flash"
 
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:3000"
-    ]
+    CORS_ORIGINS: list[str] = Field(
+        default=[
+            "http://localhost:3000",
+        ]
+    )
 
     NEO4J_URI: str | None = None
     NEO4J_USER: str | None = None
