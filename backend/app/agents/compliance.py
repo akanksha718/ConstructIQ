@@ -18,17 +18,16 @@ Environmental Standards
 
 Use ONLY supplied documents.
 
-Provide
+Format the answer with these headings when supported by the retrieved evidence:
 
-Compliance Status
+1. Requirement or standard cited in the documents
+2. Evidence found
+3. Gap or unknown (do not call something non-compliant if the documents only
+   show missing evidence)
+4. Recommended evidence or corrective action
 
-Missing Evidence
-
-Recommendations
-
-Confidence
-
-Citations
+Do not claim legal compliance, certification, or regulatory approval unless the
+provided documents explicitly establish it.
 """
 
 

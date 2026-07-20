@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.graph.entity_resolver import EntityResolver
 from app.models.entity import DocumentEntity
+from app.retrieval.reranker import GeminiReranker
 from app.vectorstore.search import RetrievedChunk, VectorSearcher
 
 
@@ -20,17 +21,16 @@ class HybridRetriever:
         self.db = db
 
     def retrieve(self, question: str, k: int = 8) -> dict:
-        chunks = VectorSearcher.search(self.db, question, k=k)
+        candidates = VectorSearcher.search(self.db, question, k=20)
+        chunks = GeminiReranker.rerank(question, candidates, top_k=k)
         related_equipment = self._related_equipment(question)
 
         context = self._build_context(chunks)
         citations = self._build_citations(chunks)
-        confidence = self._confidence(chunks)
-
         return {
             "context": context,
             "citations": citations,
-            "confidence": confidence,
+            "chunks": chunks,
             "related_equipment": related_equipment,
         }
 
@@ -88,11 +88,11 @@ class HybridRetriever:
         return citations
 
     @staticmethod
-    def _confidence(chunks: list[RetrievedChunk]) -> float:
+    def confidence_for_chunks(chunks: list[RetrievedChunk]) -> float:
+        """Confidence is based only on chunks that support the final answer."""
         if not chunks:
             return 0.0
-        top = max(c.score for c in chunks)
-        return round(float(top), 3)
+        return round(sum(max(0.0, min(1.0, c.score)) for c in chunks) / len(chunks), 3)
 
     @staticmethod
     def _excerpt(content: str, limit: int = 220) -> str:

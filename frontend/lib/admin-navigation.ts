@@ -46,26 +46,6 @@ export const consoleNavigation: NavGroup[] = [
         href: "/admin/upload",
         icon: Upload,
       },
-      {
-        title: "Collections",
-        href: "/admin/knowledge/collections",
-        icon: FolderTree,
-      },
-      {
-        title: "Processing",
-        href: "/console/knowledge/processing",
-        icon: Cpu,
-      },
-    ],
-  },
-  {
-    title: "AI",
-    items: [
-      {
-        title: "Knowledge Test",
-        href: "/console/ai",
-        icon: BrainCircuit,
-      },
     ],
   },
   {
@@ -73,17 +53,17 @@ export const consoleNavigation: NavGroup[] = [
     items: [
       {
         title: "Users",
-        href: "/console/users",
+        href: "/admin/users",
         icon: Users,
       },
       {
         title: "Analytics",
-        href: "/console/analytics",
+        href: "/admin/analytics",
         icon: ChartColumn,
       },
       {
         title: "Settings",
-        href: "/console/settings",
+        href: "/admin/settings",
         icon: Settings,
       },
     ],

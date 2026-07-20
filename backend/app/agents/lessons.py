@@ -14,17 +14,16 @@ Audit Findings
 
 Failure Records
 
-Return
+Format the answer with these headings when the evidence supports them:
 
-Patterns
+1. Observed pattern
+2. Supporting incidents or findings
+3. Operational lesson
+4. Preventive recommendation
+5. Evidence limitations
 
-Repeated Failures
-
-Recommendations
-
-Confidence
-
-Citations
+Treat a pattern as tentative unless multiple cited records support it. Never
+invent incident frequencies or causal links.
 """
 
 

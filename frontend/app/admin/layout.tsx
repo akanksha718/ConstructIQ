@@ -1,15 +1,26 @@
 import type { ReactNode } from "react";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 
 import Sidebar from "@/components/admin/layout/sidebar";
 import Topbar from "@/components/admin/layout/topbar";
+import { getUserRole } from "@/lib/auth";
 
 interface ConsoleLayoutProps {
   children: ReactNode;
 }
 
-export default function ConsoleLayout({
+export default async function ConsoleLayout({
   children,
 }: ConsoleLayoutProps) {
+  const { userId, sessionClaims } = await auth();
+  if (!userId) {
+    redirect("/sign-in?redirect_url=/admin/dashboard");
+  }
+  if (getUserRole(sessionClaims) !== "admin") {
+    redirect("/chat");
+  }
+
   return (
     <div className="flex min-h-screen bg-slate-950 text-white">
       {/* Background Glow */}

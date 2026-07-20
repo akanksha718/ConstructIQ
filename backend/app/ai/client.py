@@ -16,6 +16,9 @@ import logging
 import re
 from typing import Any
 
+from sqlalchemy import text
+from typer import prompt
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -26,8 +29,16 @@ EMBEDDING_DIM = 768
 
 _PLACEHOLDER_KEYS = {"", "d", "dummy", "changeme", "your-gemini-api-key"}
 
-LLM_MODEL = "gemini-2.5-flash"
-EMBEDDING_MODEL = "models/text-embedding-004"
+LLM_MODEL = settings.GEMINI_LLM_MODEL
+EMBEDDING_MODEL = "gemini-embedding-001"
+
+
+class GeminiQuotaError(RuntimeError):
+    """Gemini rejected a request because the configured quota is exhausted."""
+
+
+class GeminiModelError(RuntimeError):
+    """The configured Gemini model is unavailable for the current API key."""
 
 
 def _looks_like_placeholder(key: str | None) -> bool:
@@ -51,10 +62,12 @@ class AIClient:
             return
 
         try:
-            import google.generativeai as genai
+            from google import genai
 
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            self._genai = genai
+            self._client = genai.Client(
+                api_key=settings.GEMINI_API_KEY
+            )
+
             self.available = True
         except Exception:  # pragma: no cover - optional dependency/network
             logger.exception(
@@ -67,18 +80,48 @@ class AIClient:
             return ""
 
         try:
-            model = self._genai.GenerativeModel(LLM_MODEL)
-            response = model.generate_content(prompt)
-            return (response.text or "").strip()
+            response = self._client.models.generate_content(
+                model=LLM_MODEL,
+                contents=prompt,
+            )
+            return response.text.strip()
         except Exception:  # pragma: no cover - network
             logger.exception("Gemini text generation failed.")
             return ""
 
-    def generate_json(self, prompt: str) -> dict[str, Any]:
-        """Generate content and parse it as JSON, tolerating code fences."""
+    def generate_json(
+        self, prompt: str, *, raise_on_error: bool = False
+    ) -> dict[str, Any]:
+        """Request JSON from Gemini and return a parsed object, or an empty dict."""
 
-        text = self.generate_text(prompt)
-        return self._parse_json(text)
+        if not self.available:
+            return {}
+
+        try:
+            response = self._client.models.generate_content(
+                model=LLM_MODEL,
+                contents=prompt,
+                config={"response_mime_type": "application/json"},
+            )
+            return self._parse_json(response.text or "")
+        except Exception as exc:  # pragma: no cover - network/SDK version
+            logger.exception("Gemini JSON generation failed.")
+            message = str(exc).lower()
+            if raise_on_error and any(
+                marker in message
+                for marker in ("resource_exhausted", "quota", "rate limit", "429")
+            ):
+                raise GeminiQuotaError(
+                    "Gemini API quota is exhausted or rate-limited. Please try again later."
+                ) from exc
+            if raise_on_error and any(
+                marker in message for marker in ("not_found", "not found", "no longer available")
+            ):
+                raise GeminiModelError(
+                    f"The configured Gemini model '{LLM_MODEL}' is unavailable. "
+                    "Update GEMINI_LLM_MODEL in backend/.env and restart the backend."
+                ) from exc
+            return {}
 
     @staticmethod
     def _parse_json(text: str) -> dict[str, Any]:
@@ -120,18 +163,16 @@ class AIClient:
             return None
 
         try:
-            result = self._genai.embed_content(
+            result = self._client.models.embed_content(
                 model=EMBEDDING_MODEL,
-                content=content,
-                task_type=task_type,
+                contents=content,
             )
-            return result["embedding"]
+            return result.embeddings[0].values
         except Exception:  # pragma: no cover - network
             logger.exception("Gemini embedding failed.")
             return None
 
     def embed_query(self, text: str) -> list[float] | None:
         return self.embed(text, task_type="retrieval_query")
-
 
 ai_client = AIClient()

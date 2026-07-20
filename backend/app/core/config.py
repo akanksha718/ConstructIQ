@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     CLERK_JWKS_URL: str
 
     GEMINI_API_KEY: str
+    GEMINI_LLM_MODEL: str = "gemini-3.5-flash"
 
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000"
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     NEO4J_PASSWORD: str | None = None
 
     REDIS_URL: str | None = None
+    QUERY_CACHE_TTL_SECONDS: int = 300
 
     model_config = SettingsConfigDict(
         env_file=".env",

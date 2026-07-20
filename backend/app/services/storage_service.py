@@ -1,29 +1,23 @@
 from uuid import uuid4
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+import logging
 
-from fastapi import HTTPException
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 
 from app.db.supabase import supabase
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class StorageService:
     """
     Handles all Supabase Storage operations.
-
-    Responsibilities
-    ----------------
-    - Upload file
-    - Download file
-    - Delete file
-    - Generate public URL
     """
 
     BUCKET = settings.SUPABASE_BUCKET
 
-    # Allowed file extensions
     ALLOWED_EXTENSIONS = {
         "pdf",
         "doc",
@@ -44,7 +38,6 @@ class StorageService:
         "zip",
     }
 
-    # Maximum upload size (100 MB)
     MAX_FILE_SIZE = 100 * 1024 * 1024
 
     @classmethod
@@ -52,22 +45,8 @@ class StorageService:
         cls,
         file: UploadFile,
     ) -> tuple[str, str, int]:
-        """
-        Upload a file to Supabase Storage.
 
-        Returns
-        -------
-        storage_path
-        public_url
-        file_size
-        """
-
-        extension = (
-            Path(file.filename)
-            .suffix
-            .replace(".", "")
-            .lower()
-        )
+        extension = Path(file.filename).suffix.lower().replace(".", "")
 
         if extension not in cls.ALLOWED_EXTENSIONS:
             raise HTTPException(
@@ -76,7 +55,6 @@ class StorageService:
             )
 
         content = await file.read()
-
         size = len(content)
 
         if size > cls.MAX_FILE_SIZE:
@@ -86,51 +64,57 @@ class StorageService:
             )
 
         filename = f"{uuid4()}.{extension}"
+        storage_path = f"documents/{filename}"
 
-        storage_path = (
-            f"documents/{filename}"
-        )
+        try:
+            print("=" * 60)
+            print("SUPABASE URL :", settings.SUPABASE_URL)
+            print("BUCKET       :", cls.BUCKET)
+            print("UPLOAD PATH  :", storage_path)
+            print("FILE SIZE    :", size)
+            print("=" * 60)
 
-        result = (
-            supabase.storage
-            .from_(cls.BUCKET)
-            .upload(
-                storage_path,
-                content,
-                {
-                    "content-type": file.content_type,
-                    "upsert": False,
-                },
+            result = (
+                supabase.storage
+                .from_(cls.BUCKET)
+                .upload(
+                    storage_path,
+                    content,
+                    file_options={
+                        "content-type": file.content_type,
+                        "upsert": "false",
+                    },
+                )
             )
-        )
 
-        if result is None:
+            print("UPLOAD RESULT:", result)
+
+            public_url = (
+                supabase.storage
+                .from_(cls.BUCKET)
+                .get_public_url(storage_path)
+            )
+
+            print("PUBLIC URL:", public_url)
+
+            return (
+                storage_path,
+                public_url,
+                size,
+            )
+
+        except Exception as e:
+            logger.exception("Supabase upload failed")
             raise HTTPException(
                 status_code=500,
-                detail="Failed to upload file to storage.",
+                detail=str(e),
             )
-
-        public_url = (
-            supabase.storage
-            .from_(cls.BUCKET)
-            .get_public_url(storage_path)
-        )
-
-        return (
-            storage_path,
-            public_url,
-            size,
-        )
 
     @classmethod
     async def download_file(
         cls,
         storage_path: str,
     ) -> str:
-        """
-        Download a file from Supabase
-        and return a temporary local path.
-        """
 
         data = (
             supabase.storage
@@ -138,11 +122,9 @@ class StorageService:
             .download(storage_path)
         )
 
-        suffix = Path(storage_path).suffix
-
         temp = NamedTemporaryFile(
             delete=False,
-            suffix=suffix,
+            suffix=Path(storage_path).suffix,
         )
 
         temp.write(data)
@@ -156,27 +138,36 @@ class StorageService:
         cls,
         storage_path: str,
     ) -> None:
-        """
-        Delete a file from Supabase Storage.
-        """
 
-        (
-            supabase.storage
-            .from_(cls.BUCKET)
-            .remove([storage_path])
-        )
+        supabase.storage.from_(cls.BUCKET).remove([storage_path])
 
     @classmethod
     def get_public_url(
         cls,
         storage_path: str,
     ) -> str:
-        """
-        Return the public URL of an existing file.
-        """
 
         return (
             supabase.storage
             .from_(cls.BUCKET)
             .get_public_url(storage_path)
         )
+
+    @classmethod
+    def get_access_url(cls, storage_path: str, fallback_url: str = "") -> str:
+        """Return a short-lived URL that works for both private and public buckets."""
+        if not storage_path:
+            return fallback_url
+
+        try:
+            result = (
+                supabase.storage
+                .from_(cls.BUCKET)
+                .create_signed_url(storage_path, 60 * 10)
+            )
+            if isinstance(result, dict):
+                return result.get("signedURL") or result.get("signed_url") or fallback_url
+            return getattr(result, "signed_url", None) or getattr(result, "signedURL", None) or fallback_url
+        except Exception:
+            logger.exception("Unable to create a signed document URL for %s", storage_path)
+            return fallback_url or cls.get_public_url(storage_path)

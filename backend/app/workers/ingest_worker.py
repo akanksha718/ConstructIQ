@@ -5,6 +5,7 @@ import time
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.core.redis import query_cache
 
 from app.models.document import Document
 from app.models.document import ProcessingStatus
@@ -64,6 +65,7 @@ class IngestWorker:
             )
 
             db.commit()
+            query_cache.invalidate_corpus()
 
             # Download from Supabase
             local_path = (

@@ -15,8 +15,10 @@ import {
   Wrench,
 } from "lucide-react";
 
-import { askIndustrialCopilot, type ChatResponse } from "@/services/chat.service";
+import { askIndustrialCopilot, type ChatCitation, type ChatResponse } from "@/services/chat.service";
+import API_URL from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const SUGGESTED_PROMPTS = [
   "Why did pump P-204 trip repeatedly last month?",
@@ -76,6 +78,50 @@ function getConfidenceTone(confidence: number) {
     barClass: "from-rose-300 via-fuchsia-400 to-cyan-400",
     textClass: "text-rose-100",
   };
+}
+
+function getDocumentUrl(citation: ChatCitation) {
+  // Always use the API redirect when an id is present. It gives old documents
+  // with stale/relative storage URLs the same reliable open behaviour as new ones.
+  if (Number.isInteger(citation.document_id)) {
+    return `${API_URL}/api/documents/${citation.document_id}/open`;
+  }
+
+  return citation.file_url;
+}
+
+async function openCitationDocument(citation: ChatCitation) {
+  const fallbackUrl = getDocumentUrl(citation);
+  const documentWindow = window.open("", "_blank", "noopener,noreferrer");
+  // const documentWindow = window.open("about:blank", "_blank"); 
+
+  if (!documentWindow) {
+    toast.error("Your browser blocked the document window. Please allow pop-ups and try again.");
+    return;
+  }
+
+  try {
+    documentWindow.document.title = "Opening document…";
+    let url = citation.file_url;
+    if (Number.isInteger(citation.document_id)) {
+      const response = await fetch(`${API_URL}/api/documents/${citation.document_id}/access-url`);
+      const payload = (await response.json().catch(() => null)) as { url?: string; detail?: string } | null;
+      if (!response.ok || !payload?.url) {
+        throw new Error(payload?.detail || "The document is no longer available.");
+      }
+      url = payload.url;
+    }
+
+    if (!url && !fallbackUrl) {
+      throw new Error("The document does not have an accessible file URL.");
+    }
+    documentWindow.location.href = url || fallbackUrl!;
+    // documentWindow.opener = null;
+    // documentWindow.location.replace(url || fallbackUrl!);
+  } catch (error) {
+    documentWindow.close();
+    toast.error(error instanceof Error ? error.message : "Could not open the document.");
+  }
 }
 
 function AnswerText({ content }: { content: string }) {
@@ -161,16 +207,15 @@ function CitationCard({ response }: { response: ChatResponse }) {
                   </div>
                 </div>
 
-                {citation.file_url ? (
-                  <a
-                    href={citation.file_url}
-                    target="_blank"
-                    rel="noreferrer"
+                {getDocumentUrl(citation) ? (
+                  <button
+                    type="button"
+                    onClick={() => void openCitationDocument(citation)}
                     className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100 transition hover:border-cyan-200/40 hover:bg-cyan-400/15"
                   >
                     <Link2 className="size-3.5" />
                     Open document
-                  </a>
+                  </button>
                 ) : null}
               </div>
 
@@ -279,6 +324,8 @@ export default function IndustrialChat() {
         error instanceof Error
           ? error.message
           : "The assistant could not process this request.";
+
+      toast.error(message);
 
       setMessages((current) =>
         current.map((entry) =>

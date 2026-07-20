@@ -19,6 +19,8 @@ import { uploadDocuments } from "@/services/upload.service";
 import { getStats, type KnowledgeStats } from "@/services/stats.service";
 import { toast } from "sonner";
 import { useAuth } from "@clerk/nextjs";
+import { getRecentDocuments } from "@/services/document-service";
+import { RecentDocument } from "@/types/documents";
 
 function formatStat(value: number): string {
   if (value >= 1_000_000) {
@@ -165,6 +167,25 @@ export default function UploadPage() {
       title: "Vector Database",
     },
   ];
+  const [documents, setDocuments] = useState<RecentDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    async function loadDocuments() {
+      try {
+        const token = await getToken();
+
+        const data = await getRecentDocuments(token);
+
+        setDocuments(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDocuments();
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#020617] text-white relative overflow-hidden">
@@ -411,41 +432,36 @@ export default function UploadPage() {
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-8">
-
             <h2 className="text-xl font-semibold">
-
               Recent Processing
-
             </h2>
 
             <div className="mt-8 space-y-6">
 
-              <div className="flex justify-between">
+              {loading && (
+                <p className="text-sm text-zinc-400">
+                  Loading...
+                </p>
+              )}
 
-                <span>Pump_Inspection_Report.pdf</span>
+              {!loading &&
+                documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between"
+                  >
+                    <span className="truncate">
+                      {doc.filename}
+                    </span>
 
-                <Clock3 className="text-cyan-400" />
-
-              </div>
-
-              <div className="flex justify-between">
-
-                <span>P&ID_Unit_04.pdf</span>
-
-                <CheckCircle2 className="text-green-400" />
-
-              </div>
-
-              <div className="flex justify-between">
-
-                <span>Maintenance_Log_March.xlsx</span>
-
-                <CheckCircle2 className="text-green-400" />
-
-              </div>
-
+                    {doc.processing_status === "READY" ? (
+                      <CheckCircle2 className="text-green-400" />
+                    ) : (
+                      <Clock3 className="text-cyan-400" />
+                    )}
+                  </div>
+                ))}
             </div>
-
           </div>
 
         </section>
