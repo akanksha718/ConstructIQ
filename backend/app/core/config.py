@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str
     GEMINI_LLM_MODEL: str = "gemini-3.5-flash"
 
-    CORS_ORIGINS=str
+    CORS_ORIGINS: str = "https://construct-iq-ten.vercel.app"
 
     NEO4J_URI: str | None = None
     NEO4J_USER: str | None = None
